@@ -10,16 +10,36 @@ const SPLINTERLANDS_API_URL = process.env.SPLINTERLANDS_API_URL;
 const RUNI_ACCOUNT_NAME = process.env.RUNI_ACCOUNT_NAME;
 
 const START_FROM = 0;
+let CURRENT_RUNI_NUMBER = 1;
+let RUNI_ERROR_NUMBER = null;
+let RUNI_ERROR_COUNT = 1;
 
-const HISTORY = [];
+let HISTORY;
 
-matchAllRuniDelegations().then(() => {
-    console.log('done');
-    console.log(HISTORY);
-}).catch((error) => {
-    console.log('error', error);
-    console.log(HISTORY);
-});
+async function main() {
+    HISTORY = [];
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+        await matchAllRuniDelegations().then(() => {
+            console.log('done');
+        }).catch((error) => {
+            console.log('error', error);
+            if (RUNI_ERROR_NUMBER === CURRENT_RUNI_NUMBER) {
+                if (RUNI_ERROR_COUNT > 3) {
+                    RUNI_ERROR_COUNT = 0;
+                    CURRENT_RUNI_NUMBER++;
+                } else {
+                    RUNI_ERROR_COUNT++;
+                }
+            } else {
+                RUNI_ERROR_NUMBER = CURRENT_RUNI_NUMBER;
+            }
+        });
+    }
+}
+
+main();
+
 
 async function hydrateAllRuni() {
     const chunkSize = 10;
@@ -31,14 +51,14 @@ async function hydrateAllRuni() {
         }
         const chunk = allRuni.slice(i, i + chunkSize);
         const results = await Promise.all(chunk.map(
-            (runiNumber) => axios.get(`${RUNI_PROXY_URL}/api/hydrate-assignment/${runiNumber}`)
+            (CURRENT_RUNI_NUMBER) => axios.get(`${RUNI_PROXY_URL}/api/hydrate-assignment/${CURRENT_RUNI_NUMBER}`)
         ));
         results.forEach(((result, j) => {
-            const runiNumber = i + j + 1;
+            const CURRENT_RUNI_NUMBER = i + j + 1;
             if (result?.data?.success) {
-                historyLog('HYDRATED RUNI: ', runiNumber);
+                historyLog('HYDRATED RUNI: ', CURRENT_RUNI_NUMBER);
             } else {
-                historyLog('ERROR HYDRATING RUNI: ', runiNumber);
+                historyLog('ERROR HYDRATING RUNI: ', CURRENT_RUNI_NUMBER);
             }
         }));
     }
@@ -55,58 +75,60 @@ async function getAllRuniCards() {
 
 async function matchAllRuniDelegations() {
     let allRuniCards = await getAllRuniCards();
-    for (let runiNumber = 1; runiNumber <= NUMBER_OF_RUNI; runiNumber++) {
-        if (runiNumber < START_FROM) {
+    while (CURRENT_RUNI_NUMBER <= NUMBER_OF_RUNI) {
+        if (CURRENT_RUNI_NUMBER < START_FROM) {
             continue;
         }
-        if (runiNumber % 10 === 0) {
+        if (CURRENT_RUNI_NUMBER % 10 === 0) {
             // refresh cards data periodically
             allRuniCards = await getAllRuniCards();
         }
 
-        const hydrateResult = await axios.get(`${RUNI_PROXY_URL}/api/hydrate-assignment/${runiNumber}`);
+        const hydrateResult = await axios.get(`${RUNI_PROXY_URL}/api/hydrate-assignment/${CURRENT_RUNI_NUMBER}`);
         if (hydrateResult?.data?.success) {
-            historyLog('HYDRATED RUNI: ', runiNumber);
+            historyLog('HYDRATED RUNI: ', CURRENT_RUNI_NUMBER);
         } else {
-            historyLog('ERROR HYDRATING RUNI: ', runiNumber);
-            throw Error(`ERROR HYDRATING RUNI ${runiNumber}`);
+            historyLog('ERROR HYDRATING RUNI: ', CURRENT_RUNI_NUMBER);
+            throw Error(`ERROR HYDRATING RUNI ${CURRENT_RUNI_NUMBER}`);
         }
 
-        const layersResult = await axios.get(`https://runi.splinterlands.com/layers/${runiNumber}.json`);
+        const layersResult = await axios.get(`https://runi.splinterlands.com/layers/${CURRENT_RUNI_NUMBER}.json`);
         const cardId = layersResult?.data?.cardId;
         if (!cardId) {
-            historyLog('CANT FIND RUNI CARD ID: ', runiNumber);
-            continue;
+            historyLog('CANT FIND RUNI CARD ID: ', CURRENT_RUNI_NUMBER);
+            throw Error(`CANT FIND RUNI CARD ID ${CURRENT_RUNI_NUMBER}`);
         }
         const runiCard = allRuniCards.find((card) => card.uid === cardId);
         if (!runiCard) {
-            historyLog('CANT FIND RUNI CARD: ', runiNumber);
+            historyLog('CANT FIND RUNI CARD: ', CURRENT_RUNI_NUMBER);
         }
-        const result = await axios.get(`${RUNI_PROXY_URL}/api/token-assignment/${runiNumber}`);
+        const result = await axios.get(`${RUNI_PROXY_URL}/api/token-assignment/${CURRENT_RUNI_NUMBER}`);
         if (result?.data) {
             // RUNI SHOULD BE ASSIGNED
             const shouldBeAssignedTo = result.data;
             if (shouldBeAssignedTo !== runiCard.delegated_to) {
-                historyLog('MISMATCH FOR', runiNumber, 'SHOULD BE ASSIGNED TO', shouldBeAssignedTo, 'BUT CURRENT DELEGATION IS', runiCard.delegated_to);
+                historyLog('MISMATCH FOR', CURRENT_RUNI_NUMBER, 'SHOULD BE ASSIGNED TO', shouldBeAssignedTo, 'BUT CURRENT DELEGATION IS', runiCard.delegated_to);
                 if (runiCard.delegated_to) {
-                    historyLog(runiNumber, 'ALREADY DELEGATED, UNDELEGATING FIRST');
+                    historyLog(CURRENT_RUNI_NUMBER, 'ALREADY DELEGATED, UNDELEGATING FIRST');
                     await undelegate(cardId);
                 }
-                historyLog('DELEGATING', runiNumber, 'TO', shouldBeAssignedTo);
+                historyLog('DELEGATING', CURRENT_RUNI_NUMBER, 'TO', shouldBeAssignedTo);
                 await delegate(shouldBeAssignedTo, cardId);
             } else {
-                historyLog(runiNumber, 'CORRECTLY ASSIGNED');
+                historyLog(CURRENT_RUNI_NUMBER, 'CORRECTLY ASSIGNED');
             }
         } else {
             // RUNI SHOULD NOT BE ASSIGNED
             if (runiCard.delegated_to) {
-                historyLog(runiNumber, 'SHOULD NOT BE ASSIGNED, BUT IT IS, TRIGGERING UNDELEGATE');
+                historyLog(CURRENT_RUNI_NUMBER, 'SHOULD NOT BE ASSIGNED, BUT IT IS, TRIGGERING UNDELEGATE');
                 await undelegate(cardId);
             } else {
-                historyLog(runiNumber, 'CORRECTLY UNASSIGNED');
+                historyLog(CURRENT_RUNI_NUMBER, 'CORRECTLY UNASSIGNED');
             }
         }
+        CURRENT_RUNI_NUMBER++;
     }
+    CURRENT_RUNI_NUMBER = 1;
 }
 
 function historyLog(...params) {
