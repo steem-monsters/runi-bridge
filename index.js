@@ -7,7 +7,7 @@ const hiveClient = new Client({ nodes: JSON.parse(process.env.RPC_NODES) });
 const NUMBER_OF_RUNI = +process.env.NUMBER_OF_RUNI;
 const RUNI_PROXY_URL = process.env.RUNI_PROXY_URL;
 const SPLINTERLANDS_API_URL = process.env.SPLINTERLANDS_API_URL;
-const RUNI_HOLDING_ACCOUNT = process.env.RUNI_HOLDING_ACCOUNT;
+const RUNI_ACCOUNT_NAME = process.env.RUNI_ACCOUNT_NAME;
 
 matchAllRuniDelegations().then(() => console.log('done')).catch((error) => console.log('error', error));
 
@@ -24,7 +24,7 @@ async function hydrateAllRuni() {
 }
 
 async function matchAllRuniDelegations() {
-    const allRuniCardsResponse = await axios.get(`${SPLINTERLANDS_API_URL}/cards/collection/${RUNI_HOLDING_ACCOUNT}`);
+    const allRuniCardsResponse = await axios.get(`${SPLINTERLANDS_API_URL}/cards/collection/${RUNI_ACCOUNT_NAME}`);
     const allRuniCards = allRuniCardsResponse?.data?.cards || [];
     if (allRuniCards.length === 0) {
         throw Error('Cannot find runi cards!');
