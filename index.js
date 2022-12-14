@@ -11,7 +11,15 @@ const RUNI_ACCOUNT_NAME = process.env.RUNI_ACCOUNT_NAME;
 
 const START_FROM = 0;
 
-matchAllRuniDelegations().then(() => console.log('done')).catch((error) => console.log('error', error));
+const HISTORY = [];
+
+matchAllRuniDelegations().then(() => {
+    console.log('done');
+    console.log(HISTORY);
+}).catch((error) => {
+    console.log('error', error);
+    console.log(HISTORY);
+});
 
 async function hydrateAllRuni() {
     const chunkSize = 10;
@@ -28,9 +36,9 @@ async function hydrateAllRuni() {
         results.forEach(((result, j) => {
             const runiNumber = i + j + 1;
             if (result?.data?.success) {
-                console.log('HYDRATED RUNI: ', runiNumber);
+                historyLog('HYDRATED RUNI: ', runiNumber);
             } else {
-                console.log('ERROR HYDRATING RUNI: ', runiNumber);
+                historyLog('ERROR HYDRATING RUNI: ', runiNumber);
             }
         }));
     }
@@ -49,38 +57,44 @@ async function matchAllRuniDelegations() {
         const layersResult = await axios.get(`https://runi.splinterlands.com/layers/${runiNumber}.json`);
         const cardId = layersResult?.data?.cardId;
         if (!cardId) {
-            console.log('CANT FIND RUNI CARD ID: ', runiNumber);
+            historyLog('CANT FIND RUNI CARD ID: ', runiNumber);
             continue;
         }
         const runiCard = allRuniCards.find((card) => card.uid === cardId);
         if (!runiCard) {
-            console.log('CANT FIND RUNI CARD: ', runiNumber);
+            historyLog('CANT FIND RUNI CARD: ', runiNumber);
         }
         const result = await axios.get(`${RUNI_PROXY_URL}/api/token-assignment/${runiNumber}`);
         if (result?.data) {
             // RUNI SHOULD BE ASSIGNED
             const shouldBeAssignedTo = result.data;
             if (shouldBeAssignedTo !== runiCard.delegated_to) {
-                console.log('MISMATCH FOR', runiNumber, 'SHOULD BE ASSIGNED TO', shouldBeAssignedTo, 'BUT CURRENT DELEGATION IS', runiCard.delegated_to);
+                historyLog('MISMATCH FOR', runiNumber, 'SHOULD BE ASSIGNED TO', shouldBeAssignedTo, 'BUT CURRENT DELEGATION IS', runiCard.delegated_to);
                 if (runiCard.delegated_to) {
-                    console.log(runiNumber, 'ALREADY DELEGATED, UNDELEGATING FIRST');
+                    historyLog(runiNumber, 'ALREADY DELEGATED, UNDELEGATING FIRST');
                     await undelegate(cardId);
                 }
-                console.log('DELEGATING', runiNumber, 'TO', shouldBeAssignedTo);
+                historyLog('DELEGATING', runiNumber, 'TO', shouldBeAssignedTo);
                 await delegate(shouldBeAssignedTo, cardId);
             } else {
-                console.log(runiNumber, 'CORRECTLY ASSIGNED');
+                historyLog(runiNumber, 'CORRECTLY ASSIGNED');
             }
         } else {
             // RUNI SHOULD NOT BE ASSIGNED
             if (runiCard.delegated_to) {
-                console.log(runiNumber, 'SHOULD NOT BE ASSIGNED, BUT IT IS, TRIGGERING UNDELEGATE');
+                historyLog(runiNumber, 'SHOULD NOT BE ASSIGNED, BUT IT IS, TRIGGERING UNDELEGATE');
                 await undelegate(cardId);
             } else {
-                console.log(runiNumber, 'CORRECTLY UNASSIGNED');
+                historyLog(runiNumber, 'CORRECTLY UNASSIGNED');
             }
         }
     }
+}
+
+function historyLog(...params) {
+    const message = params.join(' ');
+    console.log(message);
+    HISTORY.push(message);
 }
 
 function sleep(ms) {
