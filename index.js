@@ -12,7 +12,7 @@ const RUNI_ACCOUNT_NAME = process.env.RUNI_ACCOUNT_NAME;
 matchAllRuniDelegations().then(() => console.log('done')).catch((error) => console.log('error', error));
 
 async function hydrateAllRuni() {
-    const chunkSize = 20;
+    const chunkSize = 10;
     const allRuni = Array.from({ length: NUMBER_OF_RUNI }, (_, i) => i + 1);
 
     for (let i = 0; i <= NUMBER_OF_RUNI; i += chunkSize) {
