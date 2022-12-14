@@ -44,16 +44,34 @@ async function hydrateAllRuni() {
     }
 }
 
-async function matchAllRuniDelegations() {
+async function getAllRuniCards() {
     const allRuniCardsResponse = await axios.get(`${SPLINTERLANDS_API_URL}/cards/collection/${RUNI_ACCOUNT_NAME}`);
     const allRuniCards = allRuniCardsResponse?.data?.cards || [];
     if (allRuniCards.length === 0) {
         throw Error('Cannot find runi cards!');
     }
+    return allRuniCards;
+}
+
+async function matchAllRuniDelegations() {
+    let allRuniCards = await getAllRuniCards();
     for (let runiNumber = 1; runiNumber <= NUMBER_OF_RUNI; runiNumber++) {
         if (runiNumber < START_FROM) {
             continue;
         }
+        if (runiNumber % 10 === 0) {
+            // refresh cards data periodically
+            allRuniCards = await getAllRuniCards();
+        }
+
+        const hydrateResult = await axios.get(`${RUNI_PROXY_URL}/api/hydrate-assignment/${runiNumber}`);
+        if (hydrateResult?.data?.success) {
+            historyLog('HYDRATED RUNI: ', runiNumber);
+        } else {
+            historyLog('ERROR HYDRATING RUNI: ', runiNumber);
+            throw Error(`ERROR HYDRATING RUNI ${runiNumber}`);
+        }
+
         const layersResult = await axios.get(`https://runi.splinterlands.com/layers/${runiNumber}.json`);
         const cardId = layersResult?.data?.cardId;
         if (!cardId) {
