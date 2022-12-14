@@ -9,9 +9,9 @@ const RUNI_PROXY_URL = process.env.RUNI_PROXY_URL;
 const SPLINTERLANDS_API_URL = process.env.SPLINTERLANDS_API_URL;
 const RUNI_ACCOUNT_NAME = process.env.RUNI_ACCOUNT_NAME;
 
-matchAllRuniDelegations().then(() => console.log('done')).catch((error) => console.log('error', error));
+const START_FROM = 0;
 
-const START_FROM = 201;
+matchAllRuniDelegations().then(() => console.log('done')).catch((error) => console.log('error', error));
 
 async function hydrateAllRuni() {
     const chunkSize = 10;
