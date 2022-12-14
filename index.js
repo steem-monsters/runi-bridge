@@ -12,14 +12,22 @@ const RUNI_ACCOUNT_NAME = process.env.RUNI_ACCOUNT_NAME;
 matchAllRuniDelegations().then(() => console.log('done')).catch((error) => console.log('error', error));
 
 async function hydrateAllRuni() {
-    for (let runiNumber = 1; runiNumber <= NUMBER_OF_RUNI; runiNumber++) {
-        const URL = `${RUNI_PROXY_URL}/api/hydrate-assignment/${runiNumber}`;
-        const result = await axios.get(URL);
-        if (result?.data?.success) {
-            console.log('HYDRATED RUNI: ', runiNumber);
-        } else {
-            console.log('ERROR HYDRATING RUNI: ', runiNumber, 'Retry using', URL);
-        }
+    const chunkSize = 20;
+    const allRuni = Array.from({ length: NUMBER_OF_RUNI }, (_, i) => i + 1);
+
+    for (let i = 0; i <= NUMBER_OF_RUNI; i += chunkSize) {
+        const chunk = allRuni.slice(i, i + chunkSize);
+        const results = await Promise.all(chunk.map(
+            (runiNumber) => axios.get(`${RUNI_PROXY_URL}/api/hydrate-assignment/${runiNumber}`)
+        ));
+        results.forEach(((result, j) => {
+            const runiNumber = i + j + 1;
+            if (result?.data?.success) {
+                console.log('HYDRATED RUNI: ', runiNumber);
+            } else {
+                console.log('ERROR HYDRATING RUNI: ', runiNumber);
+            }
+        }));
     }
 }
 
