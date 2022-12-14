@@ -46,18 +46,29 @@ async function matchAllRuniDelegations() {
             const shouldBeAssignedTo = result.data;
             if (shouldBeAssignedTo !== runiCard.delegated_to) {
                 console.log('MISMATCH FOR', runiNumber, 'SHOULD BE ASSIGNED TO', shouldBeAssignedTo, 'BUT CURRENT DELEGATION IS', runiCard.delegated_to);
+                if (runiCard.delegated_to) {
+                    console.log(runiNumber, 'ALREADY DELEGATED, UNDELEGATING FIRST');
+                    await undelegate(cardId);
+                }
+                console.log('DELEGATING', runiNumber, 'TO', shouldBeAssignedTo);
+                await delegate(shouldBeAssignedTo, cardId);
             } else {
                 console.log(runiNumber, 'CORRECTLY ASSIGNED');
             }
         } else {
             // RUNI SHOULD NOT BE ASSIGNED
             if (runiCard.delegated_to) {
-                console.log(runiNumber, 'SHOULD NOT BE ASSIGNED, BUT IT IS, TRIGGER UNDELEGATE');
+                console.log(runiNumber, 'SHOULD NOT BE ASSIGNED, BUT IT IS, TRIGGERING UNDELEGATE');
+                await undelegate(cardId);
             } else {
                 console.log(runiNumber, 'CORRECTLY UNASSIGNED');
             }
         }
     }
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function handleStakeEvents(contract, lastProcessedBlock, endBlock) {
@@ -105,6 +116,8 @@ async function delegate(hiveUser, cardId) {
             cards: [cardId]
         },
     }, process.env.RUNI_ACCOUNT_POSTING_KEY);
+    // avoid too many transactions in the same block
+    await sleep(600);
 }
 
 async function undelegate(cardId) {
@@ -115,4 +128,6 @@ async function undelegate(cardId) {
             cards: [cardId]
         },
     }, process.env.RUNI_ACCOUNT_POSTING_KEY);
+    // avoid too many transactions in the same block
+    await sleep(600);
 }
