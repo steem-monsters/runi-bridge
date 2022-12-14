@@ -1,57 +1,63 @@
 require('dotenv').config();
 const { Client } = require('splinterlands-dhive-sl');
-const { ethers } = require('ethers');
 const axios = require('axios');
-const runiAbi = require('./runiAbi.json');
 
 const hiveClient = new Client({ nodes: JSON.parse(process.env.RPC_NODES) });
-const blockSize = 100;
-const providers = {};
-const contracts = {};
-const someBlockNumber = undefined;
 
-main();
+const NUMBER_OF_RUNI = +process.env.NUMBER_OF_RUNI;
+const RUNI_PROXY_URL = process.env.RUNI_PROXY_URL;
+const SPLINTERLANDS_API_URL = process.env.SPLINTERLANDS_API_URL;
+const RUNI_HOLDING_ACCOUNT = process.env.RUNI_HOLDING_ACCOUNT;
 
-async function main() {
-    const contract = Contract(process.env);
-    const provider = contract.provider;
+matchAllRuniDelegations().then(() => console.log('done')).catch((error) => console.log('error', error));
 
-    const latestBlock = (await provider.getBlock('latest')).number;
-    const lastProcessedBlock = parseInt(someBlockNumber ?? process.env.RUNI_INITIAL_BLOCK);
-
-    const endBlock = Math.min(
-        latestBlock - 5,
-        lastProcessedBlock + blockSize
-    );
-
-    await handleStakeEvents(contract, lastProcessedBlock, endBlock);
-    await handleUnstakeEvents(contract, lastProcessedBlock, endBlock);
-
-    process.exit();
+async function hydrateAllRuni() {
+    for (let runiNumber = 1; runiNumber <= NUMBER_OF_RUNI; runiNumber++) {
+        const URL = `${RUNI_PROXY_URL}/api/hydrate-assignment/${runiNumber}`;
+        const result = await axios.get(URL);
+        if (result?.data?.success) {
+            console.log('HYDRATED RUNI: ', runiNumber);
+        } else {
+            console.log('ERROR HYDRATING RUNI: ', runiNumber, 'Retry using', URL);
+        }
+    }
 }
 
-function Contract(env, api = 'alchemy') {
-	if (contracts[api] && contracts[api].address === env.RUNI_CONTRACT_ADDRESS) {
-		return contracts[api];
-	}
-
-	if (!providers[api]) {
-		providers[api] = new ethers.providers.StaticJsonRpcProvider({
-			url:
-				api === 'alchemy'
-					? `https://eth-${env.ETH_NETWORK}.g.alchemy.com/v2/${env.ALCHEMY_KEY}`
-					: `https://${env.ETH_NETWORK}.infura.io/v3/${env.INFURA_KEY}`,
-			skipFetchSetup: true,
-		});
-	}
-
-	contracts[api] = new ethers.Contract(
-		env.RUNI_CONTRACT_ADDRESS.toLowerCase(),
-		runiAbi.abi,
-		providers[api]
-	);
-
-	return contracts[api];
+async function matchAllRuniDelegations() {
+    const allRuniCardsResponse = await axios.get(`${SPLINTERLANDS_API_URL}/cards/collection/${RUNI_HOLDING_ACCOUNT}`);
+    const allRuniCards = allRuniCardsResponse?.data?.cards || [];
+    if (allRuniCards.length === 0) {
+        throw Error('Cannot find runi cards!');
+    }
+    for (let runiNumber = 1; runiNumber <= NUMBER_OF_RUNI; runiNumber++) {
+        const layersResult = await axios.get(`https://runi.splinterlands.com/layers/${runiNumber}.json`);
+        const cardId = layersResult?.data?.cardId;
+        if (!cardId) {
+            console.log('CANT FIND RUNI CARD ID: ', runiNumber);
+            continue;
+        }
+        const runiCard = allRuniCards.find((card) => card.uid === cardId);
+        if (!runiCard) {
+            console.log('CANT FIND RUNI CARD: ', runiNumber);
+        }
+        const result = await axios.get(`${RUNI_PROXY_URL}/api/token-assignment/${runiNumber}`);
+        if (result?.data) {
+            // RUNI SHOULD BE ASSIGNED
+            const shouldBeAssignedTo = result.data;
+            if (shouldBeAssignedTo !== runiCard.delegated_to) {
+                console.log('MISMATCH FOR', runiNumber, 'SHOULD BE ASSIGNED TO', shouldBeAssignedTo, 'BUT CURRENT DELEGATION IS', runiCard.delegated_to);
+            } else {
+                console.log(runiNumber, 'CORRECTLY ASSIGNED');
+            }
+        } else {
+            // RUNI SHOULD NOT BE ASSIGNED
+            if (runiCard.delegated_to) {
+                console.log(runiNumber, 'SHOULD NOT BE ASSIGNED, BUT IT IS, TRIGGER UNDELEGATE');
+            } else {
+                console.log(runiNumber, 'CORRECTLY UNASSIGNED');
+            }
+        }
+    }
 }
 
 async function handleStakeEvents(contract, lastProcessedBlock, endBlock) {
@@ -67,8 +73,8 @@ async function handleStakeEvents(contract, lastProcessedBlock, endBlock) {
         const tokenID = parseInt(id._hex, 16);
         const hiveUser = await contract.cardStakedTo(tokenID);
 
-        const cardId = await getCardId(tokenID);
-        await delegate(hiveUser.toLowerCase(), cardId);
+        // const cardId = await getCardId(tokenID);
+        // await delegate(hiveUser.toLowerCase(), cardId);
     }
 }
 
@@ -84,18 +90,11 @@ async function handleUnstakeEvents(contract, lastProcessedBlock, endBlock) {
         const [_owner, id] = event.args || [];
         const tokenID = parseInt(id._hex, 16);
 
-        const cardId = await this.getCardId(tokenID);
-        await undelegate(cardId);
+        // const cardId = await this.getCardId(tokenID);
+        // await undelegate(cardId);
     }
 }
 
-async function getCardId(tokenId) {
-    // const metadata = await axios.get(`https://runi.splinterlands.com/metadata/${tokenId}.json`);
-    // return metadata.data.cardId;
-    // TODO: get this from layers.json when it is ready as the below will
-    // not be correct when it is a gold foil
-    return `C2-505-${tokenId.toString().padStart(10, '0')}`;
-}
 
 async function delegate(hiveUser, cardId) {
     await hiveClient.broadcast.customJson({
