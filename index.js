@@ -11,14 +11,14 @@ const RUNI_ACCOUNT_NAME = process.env.RUNI_ACCOUNT_NAME;
 
 matchAllRuniDelegations().then(() => console.log('done')).catch((error) => console.log('error', error));
 
-const START_FROM = 0;
+const START_FROM = 201;
 
 async function hydrateAllRuni() {
     const chunkSize = 10;
     const allRuni = Array.from({ length: NUMBER_OF_RUNI }, (_, i) => i + 1);
 
     for (let i = 0; i <= NUMBER_OF_RUNI; i += chunkSize) {
-        if (START_FROM < i) {
+        if (i < START_FROM) {
             continue;
         }
         const chunk = allRuni.slice(i, i + chunkSize);
@@ -43,7 +43,7 @@ async function matchAllRuniDelegations() {
         throw Error('Cannot find runi cards!');
     }
     for (let runiNumber = 1; runiNumber <= NUMBER_OF_RUNI; runiNumber++) {
-        if (START_FROM < runiNumber) {
+        if (runiNumber < START_FROM) {
             continue;
         }
         const layersResult = await axios.get(`https://runi.splinterlands.com/layers/${runiNumber}.json`);
